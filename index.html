@@ -52,6 +52,7 @@
   a { color: var(--destaque); }
   .atr { background: var(--card); border: 1px solid var(--linha); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
   .atr.com-alerta { border-color: var(--destaque); }
+  .atr.destaque { border: 2px solid var(--ok); box-shadow: 0 0 0 3px var(--okbg); }
   .atr .topo { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
   .atr .nome { font-weight: 600; }
   .chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 2px 9px; font-size: 12px; white-space: nowrap; }
@@ -264,6 +265,10 @@ let assinaturaOriginal = "[]";
 let comAlertaNoArquivo = new Set();   // ordem estável da lista: quem já tinha alerta fica no topo
 let orfaos = [];             // alertas do dia/parque não encontrados na lista ao vivo
 let soAlerta = false;
+// link vindo da notificação: ?data=AAAA-MM-DD&parque=<id>&atracao=<id>
+const LINK = new URLSearchParams(location.search);
+let destaqueId = LINK.get("atracao");
+let rolarParaDestaque = !!destaqueId;
 let timerLive = null;
 
 // ---------------------------------------------------------------- utilidades
@@ -405,8 +410,11 @@ async function carregarTudo() {
     const hoje = hojeFlorida();
     const datas = [...new Set(arquivo.alertas.map(a => a.data))].sort();
     sel.data = datas.includes(hoje) ? hoje : (datas.find(d => d >= hoje) || hoje);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(LINK.get("data") || "")) sel.data = LINK.get("data");
     $("inData").value = sel.data;
     escolherParqueDoDia();
+    const parqueLink = LINK.get("parque");
+    if (parqueLink && parques.some(p => p.id === parqueLink)) { sel.parqueId = parqueLink; $("inParque").value = parqueLink; }
     $("config").hidden = true;
     $("selecao").hidden = false; $("filtros").hidden = false; $("barraSalvar").hidden = false;
     mostrar("", "");
@@ -555,6 +563,10 @@ function desenhar() {
   } else {
     $("lista").innerHTML = itens.map(cartao).join("");
   }
+  if (rolarParaDestaque) {
+    const el = document.querySelector(`.atr[data-id="${CSS.escape(destaqueId)}"]`);
+    if (el) { rolarParaDestaque = false; el.scrollIntoView({ block: "center" }); }
+  }
   atualizarBarra();
 }
 
@@ -571,7 +583,8 @@ function cartao(i) {
   const bateFila = e.fila.on && aberto && espera != null && espera <= e.fila.max;
   const bateLL = e.ll.on && ll?.inicio && hhmm(ll.inicio) <= e.ll.ate;
   return `
-  <div class="atr ${temAlerta(i.id) ? "com-alerta" : ""}" data-id="${i.id}">
+  <div class="atr ${temAlerta(i.id) ? "com-alerta" : ""} ${i.id === destaqueId ? "destaque" : ""}" data-id="${i.id}">
+    ${i.id === destaqueId ? `<div class="chip ok" style="margin-bottom:6px">🔔 Aviso desta atração</div>` : ""}
     <div class="topo"><span class="nome">${esc(i.name)}</span>${chip}</div>
     ${linhaPerfil(i.name)}
     <div class="agora"><span>${filaTxt}</span>${ll ? `<span>${ll.txt}</span>` : ""}</div>
