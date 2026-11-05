@@ -103,6 +103,10 @@
     <div class="linha" style="margin-top:8px">
       <input id="inRepo" type="text" placeholder="usuario/repositorio" spellcheck="false">
     </div>
+    <p class="suave" style="margin:10px 0 4px">Crianças (nome e altura em cm), para mostrar quem pode ir em cada brinquedo:</p>
+    <div class="linha">
+      <input id="inCriancas" type="text" placeholder="Ex.: Ana 110, Pedro 95" spellcheck="false">
+    </div>
     <div class="linha" style="margin-top:10px">
       <button id="btnSalvarConfig" class="primario">Salvar</button>
       <button id="btnEsquecer">Esquecer token</button>
@@ -117,7 +121,20 @@
       <select id="inParque" aria-label="Parque"></select>
     </div>
     <div id="horario" class="suave" style="margin-top:8px"></div>
+    <div class="linha" style="margin-top:10px">
+      <label for="inFreq" class="suave" style="flex:0 0 auto">Checagem neste dia:</label>
+      <select id="inFreq" aria-label="Frequência de checagem neste dia">
+        <option value="1">a cada 1 min</option>
+        <option value="2">a cada 2 min</option>
+        <option value="5">a cada 5 min</option>
+        <option value="10">a cada 10 min</option>
+        <option value="0">desligada</option>
+      </select>
+    </div>
     <div id="avisoDia" class="aviso" hidden></div>
+    <div class="linha" style="margin-top:10px">
+      <button id="btnTeste">📨 Mandar notificação de teste</button>
+    </div>
   </section>
 
   <div class="filtros" id="filtros" hidden>
@@ -150,12 +167,14 @@ const ARQUIVO = "alertas.yaml";
 const RAMO = "main";
 const REPO_PADRAO = "Alertas-Parques/alertas-parques";
 // dias em que o agendamento do GitHub Actions roda (ver .github/workflows/monitor.yml)
-const DIAS_PARQUE = ["2026-11-08", "2026-11-10", "2026-11-12"];          // a cada 5 min
-const DIAS_TESTE = ["2026-11-05", "2026-11-06", "2026-11-07", "2026-11-09", "2026-11-11"];  // a cada 10 min
-const DIAS_AGENDADOS = [...DIAS_PARQUE, ...DIAS_TESTE].sort();
+// A frequência de checagem de cada dia fica em checagem_por_dia no alertas.yaml (o monitor na Cloudflare lê a cada minuto).
+// Sem escolha para o dia: 1 min se o dia tiver alertas, senão desligada (mesma regra do monitor).
 
-// crianças da família (altura em cm) para mostrar quem pode ir em cada brinquedo
-const CRIANCAS = [["Murilo", 117], ["Miguel", 97]];
+// crianças (nome e altura em cm): ficam só no navegador deste aparelho, nunca no código público
+function lerCriancas() {
+  return String(lerLS("painel.criancas") || "").split(",").map(s => s.trim().match(/^(.+?)\s+(\d{2,3})\s*(cm)?$/i))
+    .filter(Boolean).map(m => [m[1], Number(m[2])]);
+}
 
 // tipo e altura mínima (polegadas; 0 = sem altura mínima) das atrações dos parques da viagem.
 // A API não informa altura e classifica mal o tipo, por isso a tabela é mantida aqui.
@@ -304,13 +323,24 @@ async function github(caminho, opcoes = {}) {
 // ---------------------------------------------------------------- alertas.yaml
 function interpretar(texto, sha) {
   texto = texto.replace(/\r\n/g, "\n");
-  const m = texto.match(/^alertas:[ \t]*$/m);
-  if (!m) throw new Error('Não encontrei a linha "alertas:" no alertas.yaml.');
+  if (!/^alertas:[ \t]*$/m.test(texto)) throw new Error('Não encontrei a linha "alertas:" no alertas.yaml.');
   // CORE_SCHEMA: datas como 2026-11-08 continuam texto (igual ao str() do monitor.py)
   const dados = jsyaml.load(texto, { schema: jsyaml.CORE_SCHEMA }) || {};
   const alertas = (dados.alertas || []).map(a => ({ ...a, data: String(a.data) }));
   const antecedencia = Number(dados.minutos_antes_da_abertura ?? ANTECEDENCIA_PADRAO);
-  return { texto, sha, header: texto.slice(0, m.index), alertas, antecedencia };
+  const checagem = {};
+  for (const [dia, v] of Object.entries(dados.checagem_por_dia || {})) {
+    const n = Number(v); checagem[String(dia)] = Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  // cabeçalho = bloco de comentários do início (o resto o painel reescreve)
+  const linhas = texto.split("\n");
+  let n = 0; while (n < linhas.length && /^\s*(#.*)?$/.test(linhas[n])) n++;
+  const header = linhas.slice(0, n).join("\n").replace(/\n*$/, "\n");
+  return { texto, sha, header, alertas, antecedencia, checagem, testePedido: dados.teste_pedido ? String(dados.teste_pedido) : null };
+}
+function freqDoArquivo(data) {
+  if (data in arquivo.checagem) return arquivo.checagem[data];
+  return arquivo.alertas.some(a => a.data === data) ? 1 : 0;
 }
 
 function q(s) { return JSON.stringify(String(s)); }   // string YAML entre aspas, segura para ":" e "&"
@@ -320,7 +350,12 @@ function linhaAlerta(a) {
   if (a.tipo === "ll") p.push(`antes_de: ${q(a.antes_de)}`);
   return `  - {${p.join(", ")}}`;
 }
-function gerarYaml(header, alertas) {
+function gerarYaml(header, alertas, { antecedencia, checagem, testePedido }) {
+  let topo = header + `minutos_antes_da_abertura: ${antecedencia}\n\n` +
+    "# Frequência de checagem de cada dia, em minutos (0 = desligada). Escolha pelo painel.\n" +
+    "checagem_por_dia:\n" +
+    Object.keys(checagem).sort().map(d => `  "${d}": ${checagem[d]}`).join("\n") + "\n\n";
+  if (testePedido) topo += `# Último pedido de notificação de teste (botão do painel)\nteste_pedido: ${q(testePedido)}\n\n`;
   const porData = new Map();
   for (const a of alertas) { if (!porData.has(a.data)) porData.set(a.data, []); porData.get(a.data).push(a); }
   const blocos = [...porData.keys()].sort().map(data => {
@@ -329,7 +364,7 @@ function gerarYaml(header, alertas) {
     return `  # ---------------- ${nomes} — ${diaSemana(data)} ${ddmm(data)} ----------------\n` +
            lista.map(linhaAlerta).join("\n");
   });
-  return header + "alertas:\n\n" + blocos.join("\n\n") + "\n";
+  return topo + "alertas:\n\n" + blocos.join("\n\n") + "\n";
 }
 
 // ---------------------------------------------------------------- parques e atrações
@@ -432,12 +467,14 @@ function mostrarHorario(agenda) {
     const inicio = new Date(abre.getTime() - arquivo.antecedencia * 60000);
     txt = `Abre ${hhmm(geral.openingTime)} · fecha ${hhmm(geral.closingTime)} · alertas a partir de ${hhmm(inicio.toISOString())}`;
   }
-  const ritmo = DIAS_PARQUE.includes(sel.data) ? " · monitor a cada 5 min"
-              : DIAS_TESTE.includes(sel.data) ? " · monitor a cada 10 min (dia de teste)" : "";
-  $("horario").textContent = `${diaSemana(sel.data)}, ${ddmm(sel.data)} — ${txt}${ritmo}`;
+  $("horario").textContent = `${diaSemana(sel.data)}, ${ddmm(sel.data)} — ${txt}`;
+  $("inFreq").value = String(freqDoArquivo(sel.data));
+  mostrarAvisoFreq();
+}
+function mostrarAvisoFreq() {
   const aviso = $("avisoDia");
-  aviso.hidden = DIAS_AGENDADOS.includes(sel.data);
-  aviso.textContent = `O monitor só roda de ${ddmm(DIAS_AGENDADOS[0])} a ${ddmm(DIAS_AGENDADOS.at(-1))}. Alertas salvos para ${ddmm(sel.data)} não vão disparar sem ajustar o monitor.yml.`;
+  aviso.hidden = $("inFreq").value !== "0";
+  aviso.textContent = `Checagem desligada em ${ddmm(sel.data)}: os alertas deste dia não vão disparar.`;
 }
 
 // edits = alertas atuais do arquivo para o dia/parque, por atração
@@ -496,7 +533,7 @@ function linhaPerfil(nome) {
       partes.push(`<span>Sem altura mínima</span>`);
     } else {
       const cm = Math.round(info.h * 2.54);
-      const quem = CRIANCAS.map(([nomeC, alt]) => {
+      const quem = lerCriancas().map(([nomeC, alt]) => {
         if (alt < cm - 0.5) return `<span class="nao">${nomeC} ✗</span>`;
         return alt - cm < 3 ? `<span class="sim">${nomeC} ✓ (no limite)</span>` : `<span class="sim">${nomeC} ✓</span>`;
       }).join(" ");
@@ -563,7 +600,8 @@ function desenharOrfaos() {
 }
 
 function alteracoes() {
-  return assinatura(edits) !== assinaturaOriginal || orfaos.some(o => o.remover);
+  return assinatura(edits) !== assinaturaOriginal || orfaos.some(o => o.remover)
+    || (arquivo && Number($("inFreq").value) !== freqDoArquivo(sel.data));
 }
 function atualizarBarra() {
   const mudou = alteracoes();
@@ -574,9 +612,10 @@ function atualizarBarra() {
 }
 
 // ---------------------------------------------------------------- salvar
-async function salvar() {
-  const btn = $("btnSalvar");
-  btn.disabled = true; btn.textContent = "Salvando…";
+async function salvar({ teste = false } = {}) {
+  const btn = teste ? $("btnTeste") : $("btnSalvar");
+  const rotulo = btn.textContent;
+  btn.disabled = true; btn.textContent = teste ? "Pedindo teste…" : "Salvando…";
   try {
     // relê o arquivo para não sobrescrever uma edição feita em outro lugar
     const atual = await github(`contents/${ARQUIVO}?ref=${RAMO}`);
@@ -605,22 +644,26 @@ async function salvar() {
       }
     }
     const final = [...outros, ...mantidos, ...novos];
-    const texto = gerarYaml(arquivo.header, final);
+    const checagem = { ...arquivo.checagem, [sel.data]: Number($("inFreq").value) };
+    const testePedido = teste ? new Date().toISOString() : arquivo.testePedido;
+    const texto = gerarYaml(arquivo.header, final, { antecedencia: arquivo.antecedencia, checagem, testePedido });
     jsyaml.load(texto, { schema: jsyaml.CORE_SCHEMA });   // confere se o YAML gerado é válido antes de enviar
     const resp = await github(`contents/${ARQUIVO}`, {
       method: "PUT",
       body: JSON.stringify({
-        message: `Alertas pelo celular: ${parqueAtual.name} ${ddmm(sel.data)}`,
+        message: teste ? "Pedido de notificação de teste (painel)" : `Alertas pelo celular: ${parqueAtual.name} ${ddmm(sel.data)}`,
         content: textoParaB64(texto), sha: arquivo.sha, branch: RAMO,
       }),
     });
     arquivo = interpretar(texto, resp.content.sha);
-    montarEdits(); desenhar();
-    mostrar("sucesso", "Salvo ✓ Vale a partir da próxima rodada do monitor (até uns 5 minutos).");
+    montarEdits(); desenhar(); mostrarAvisoFreq();
+    mostrar("sucesso", teste
+      ? "Teste pedido ✓ As 3 notificações de teste chegam no celular em 1 a 2 minutos."
+      : "Salvo ✓ Vale a partir da próxima checagem do monitor (em 1 a 2 minutos).");
   } catch (e) {
-    mostrar("erro", "Não salvei: " + esc(e.message));
+    mostrar("erro", (teste ? "Não pedi o teste: " : "Não salvei: ") + esc(e.message));
   } finally {
-    btn.textContent = "Salvar alertas"; atualizarBarra();
+    btn.textContent = rotulo; btn.disabled = false; atualizarBarra();
   }
 }
 
@@ -628,6 +671,7 @@ async function salvar() {
 function abrirConfig(aberta) {
   $("config").hidden = !aberta;
   $("inRepo").value = cfg.repo;
+  $("inCriancas").value = lerLS("painel.criancas") || "";
   $("inToken").value = "";
   $("inToken").placeholder = cfg.token ? "token salvo (cole outro para trocar)" : "github_pat_...";
 }
@@ -644,6 +688,7 @@ $("btnSalvarConfig").onclick = () => {
   const t = $("inToken").value.trim(), r = $("inRepo").value.trim();
   if (t) { cfg.token = t; gravarLS("painel.token", t); }
   if (r) { cfg.repo = r; gravarLS("painel.repo", r); }
+  gravarLS("painel.criancas", $("inCriancas").value.trim() || null);
   linkToken();
   if (!cfg.token) { mostrar("erro", "Cole o token antes de salvar."); return; }
   $("config").hidden = true; carregarTudo();
@@ -662,11 +707,14 @@ $("inParque").onchange = async () => {
   sel.parqueId = $("inParque").value; await carregarParque();
 };
 $("inBusca").oninput = desenhar;
+$("inFreq").onchange = () => { mostrarAvisoFreq(); atualizarBarra(); };
+$("btnTeste").onclick = () => salvar({ teste: true });
 $("btnSoAlerta").onclick = () => { soAlerta = !soAlerta; $("btnSoAlerta").setAttribute("aria-pressed", soAlerta);
   $("btnSoAlerta").classList.toggle("primario", soAlerta); desenhar(); };
 $("btnAtualizar").onclick = atualizarFilas;
 $("btnSalvar").onclick = salvar;
-$("btnDescartar").onclick = () => { edits = JSON.parse(original); orfaos.forEach(o => o.remover = false); desenharOrfaos(); desenhar(); };
+$("btnDescartar").onclick = () => { edits = JSON.parse(original);
+  $("inFreq").value = String(freqDoArquivo(sel.data)); mostrarAvisoFreq(); orfaos.forEach(o => o.remover = false); desenharOrfaos(); desenhar(); };
 $("listaOrfaos").onclick = (ev) => {
   const n = ev.target.dataset.orfao; if (n == null) return;
   orfaos[n].remover = !orfaos[n].remover; desenharOrfaos(); atualizarBarra();
