@@ -579,7 +579,9 @@ function cartao(i) {
     : `<span class="chip ruim">${{ DOWN: "parada", CLOSED: "fechada", REFURBISHMENT: "em reforma" }[i.status] || esc(i.status || "?")}</span>`;
   const ll = resumoLL(fila);
   const temLL = !!ll || e.ll.on;
-  const filaTxt = aberto && espera != null ? `Fila: <b>${espera} min</b>` : `Fila: —`;
+  // aberta sem tempo de fila publicado = o app oficial mostra "Available"/"Disponível"
+  const filaTxt = !aberto ? `Fila: —`
+    : espera != null ? `Fila: <b>${espera} min</b>` : `<b>Disponível agora</b>`;
   const bateFila = e.fila.on && aberto && espera != null && espera <= e.fila.max;
   const bateLL = e.ll.on && ll?.inicio && hhmm(ll.inicio) <= e.ll.ate;
   return `
