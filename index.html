@@ -619,7 +619,9 @@ function alteracoes() {
 function atualizarBarra() {
   const mudou = alteracoes();
   const total = atracoes().filter(i => temAlerta(i.id)).length;
-  $("infoSalvar").textContent = mudou ? "Alterações não salvas" : `${total} atração(ões) com alerta`;
+  $("infoSalvar").textContent = mudou ? "Alterações não salvas"
+    : total === 0 ? "Nenhum alerta neste parque"
+    : total === 1 ? "1 atração com alerta" : `${total} atrações com alerta`;
   $("btnSalvar").disabled = !mudou;
   $("btnDescartar").disabled = !mudou;
 }
