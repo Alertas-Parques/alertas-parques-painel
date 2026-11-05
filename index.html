@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Painel dos Parques</title>
-<!-- manifesto próprio: id e scope exclusivos para o celular não confundir com outros apps em graraujo90.github.io -->
+<!-- manifesto próprio: id e scope exclusivos para o celular não confundir com outros apps (o painel fica na organização Alertas-Parques) -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -89,8 +89,9 @@
       O token fica guardado só neste navegador.</p>
     <ol class="suave">
       <li>Abra <a id="linkToken" target="_blank" rel="noopener">github.com → novo token (fine-grained)</a> e entre na sua conta.</li>
-      <li><b>Expiration:</b> 30 dias. <b>Repository access:</b> <i>Only select repositories</i> → <code>alertas-parques</code>.</li>
+      <li><b>Resource owner:</b> <code>Alertas-Parques</code>. <b>Expiration:</b> 30 dias. <b>Repository access:</b> <i>Only select repositories</i> → <code>alertas-parques</code>.</li>
       <li><b>Permissions → Repository → Contents:</b> <i>Read and write</i>. Gere o token e copie.</li>
+      <li>Se aparecer que o token aguarda aprovação: na organização, <i>Settings → Personal access tokens → Pending requests</i>, aprove o seu pedido.</li>
       <li>Cole abaixo e toque em Salvar.</li>
     </ol>
     <div class="linha" style="margin-top:8px">
@@ -144,7 +145,7 @@ const FUSO = "America/New_York";
 const API = "https://api.themeparks.wiki/v1";
 const ARQUIVO = "alertas.yaml";
 const RAMO = "main";
-const REPO_PADRAO = "graraujo90/alertas-parques";
+const REPO_PADRAO = "Alertas-Parques/alertas-parques";
 // dias em que o agendamento do GitHub Actions roda (ver .github/workflows/monitor.yml)
 const DIAS_AGENDADOS = ["2026-11-08", "2026-11-10", "2026-11-12"];
 const ANTECEDENCIA_PADRAO = 5;
