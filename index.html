@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Painel dos Parques</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --texto: #1c1f24; --suave: #5d6470; --linha: #e2e5ea;
+    --destaque: #2563eb; --ok: #15803d; --okbg: #dcfce7; --alerta: #b45309; --alertabg: #fef3c7;
+    --ruim: #b91c1c; --ruimbg: #fee2e2; --chip: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --card: #181c22; --texto: #e8eaed; --suave: #9aa3ae; --linha: #2a3038;
+      --destaque: #60a5fa; --ok: #4ade80; --okbg: #12331f; --alerta: #fbbf24; --alertabg: #3a2a0a;
+      --ruim: #f87171; --ruimbg: #3b1414; --chip: #232931;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--texto);
+         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--linha);
+           padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 17px; margin: 0; flex: 1; }
+  #relogio { color: var(--suave); font-size: 13px; }
+  button, input, select { font: inherit; color: inherit; }
+  button { border: 1px solid var(--linha); background: var(--card); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+  button.primario { background: var(--destaque); border-color: var(--destaque); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select { background: var(--card); border: 1px solid var(--linha); border-radius: 10px; padding: 8px 10px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 12px 16px; }
+  .painel { background: var(--card); border: 1px solid var(--linha); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .painel h2 { font-size: 15px; margin: 0 0 8px; }
+  .linha { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .linha > * { flex: 1 1 140px; min-width: 0; }
+  .suave { color: var(--suave); font-size: 13px; }
+  .aviso { background: var(--alertabg); color: var(--alerta); border-radius: 10px; padding: 8px 10px; font-size: 13px; margin-top: 8px; }
+  .erro { background: var(--ruimbg); color: var(--ruim); border-radius: 10px; padding: 8px 10px; font-size: 13px; margin-bottom: 12px; }
+  .sucesso { background: var(--okbg); color: var(--ok); border-radius: 10px; padding: 8px 10px; font-size: 13px; margin-bottom: 12px; }
+  ol { padding-left: 20px; margin: 6px 0; } li { margin: 3px 0; }
+  a { color: var(--destaque); }
+  .atr { background: var(--card); border: 1px solid var(--linha); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+  .atr.com-alerta { border-color: var(--destaque); }
+  .atr .topo { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .atr .nome { font-weight: 600; }
+  .chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 2px 9px; font-size: 12px; white-space: nowrap; }
+  .chip.ok { background: var(--okbg); color: var(--ok); }
+  .chip.ruim { background: var(--ruimbg); color: var(--ruim); }
+  .agora { margin: 6px 0 8px; font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .agora b { font-size: 16px; }
+  .controle { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px dashed var(--linha); flex-wrap: wrap; }
+  .controle label { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; }
+  .controle input[type=checkbox] { width: 20px; height: 20px; }
+  .controle input[type=number] { width: 76px; }
+  .controle input[type=time] { width: 112px; }
+  .controle .bate { font-size: 12px; }
+  #barraSalvar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--card); border-top: 1px solid var(--linha);
+                 padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); display: flex; gap: 10px; align-items: center; }
+  #barraSalvar .info { flex: 1; font-size: 13px; color: var(--suave); }
+  .filtros { display: flex; gap: 8px; margin-bottom: 10px; }
+  .filtros input[type=search] { flex: 1; min-width: 0; }
+  .orfao { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px dashed var(--linha); font-size: 14px; }
+  .orfao.removido span { text-decoration: line-through; color: var(--suave); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎢 Painel dos Parques</h1>
+  <span id="relogio"></span>
+  <button id="btnConfig" title="Configurações" aria-label="Configurações">⚙️</button>
+</header>
+
+<div class="wrap">
+  <section id="config" class="painel" hidden>
+    <h2>Configuração (só neste aparelho)</h2>
+    <p class="suave" style="margin-top:0">A página precisa de um token do GitHub para ler e salvar o <code>alertas.yaml</code>.
+      O token fica guardado só neste navegador.</p>
+    <ol class="suave">
+      <li>Abra <a id="linkToken" target="_blank" rel="noopener">github.com → novo token (fine-grained)</a> e entre na sua conta.</li>
+      <li><b>Expiration:</b> 30 dias. <b>Repository access:</b> <i>Only select repositories</i> → <code>alertas-parques</code>.</li>
+      <li><b>Permissions → Repository → Contents:</b> <i>Read and write</i>. Gere o token e copie.</li>
+      <li>Cole abaixo e toque em Salvar.</li>
+    </ol>
+    <div class="linha" style="margin-top:8px">
+      <input id="inToken" type="password" placeholder="github_pat_..." autocomplete="off" spellcheck="false">
+    </div>
+    <div class="linha" style="margin-top:8px">
+      <input id="inRepo" type="text" placeholder="usuario/repositorio" spellcheck="false">
+    </div>
+    <div class="linha" style="margin-top:10px">
+      <button id="btnSalvarConfig" class="primario">Salvar</button>
+      <button id="btnEsquecer">Esquecer token</button>
+    </div>
+  </section>
+
+  <div id="mensagem"></div>
+
+  <section class="painel" id="selecao" hidden>
+    <div class="linha">
+      <input id="inData" type="date" aria-label="Dia">
+      <select id="inParque" aria-label="Parque"></select>
+    </div>
+    <div id="horario" class="suave" style="margin-top:8px"></div>
+    <div id="avisoDia" class="aviso" hidden></div>
+  </section>
+
+  <div class="filtros" id="filtros" hidden>
+    <input id="inBusca" type="search" placeholder="Buscar atração">
+    <button id="btnSoAlerta" aria-pressed="false">Só com alerta</button>
+    <button id="btnAtualizar" title="Atualizar filas">↻</button>
+  </div>
+
+  <main id="lista"></main>
+
+  <section class="painel" id="orfaos" hidden>
+    <h2>Outros alertas deste dia</h2>
+    <p class="suave" style="margin-top:0">Não achei estas atrações na lista ao vivo agora (podem estar fechadas). Elas continuam valendo.</p>
+    <div id="listaOrfaos"></div>
+  </section>
+</div>
+
+<div id="barraSalvar" hidden>
+  <div class="info" id="infoSalvar">Sem alterações</div>
+  <button id="btnDescartar" disabled>Desfazer</button>
+  <button id="btnSalvar" class="primario" disabled>Salvar alertas</button>
+</div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- constantes
+const FUSO = "America/New_York";
+const API = "https://api.themeparks.wiki/v1";
+const ARQUIVO = "alertas.yaml";
+const RAMO = "main";
+const REPO_PADRAO = "graraujo90/alertas-parques";
+// dias em que o agendamento do GitHub Actions roda (ver .github/workflows/monitor.yml)
+const DIAS_AGENDADOS = ["2026-11-08", "2026-11-10", "2026-11-12"];
+const ANTECEDENCIA_PADRAO = 5;
+const PADRAO_FILA = 20, PADRAO_LL = "19:00";
+
+// ---------------------------------------------------------------- estado
+const cfg = { token: lerLS("painel.token") || "", repo: lerLS("painel.repo") || REPO_PADRAO };
+let arquivo = null;          // {texto, sha, header, alertas[], antecedencia}
+let parques = [];            // [{id, name}]
+let live = [];               // liveData do parque escolhido
+let sel = { data: null, parqueId: null };
+let edits = {};              // id da atração -> {fila:{on,max,orig}, ll:{on,ate,orig}}
+let original = "{}";         // JSON de edits como estava no arquivo (para Desfazer)
+let assinaturaOriginal = "[]";
+let comAlertaNoArquivo = new Set();   // ordem estável da lista: quem já tinha alerta fica no topo
+let orfaos = [];             // alertas do dia/parque não encontrados na lista ao vivo
+let soAlerta = false;
+let timerLive = null;
+
+// ---------------------------------------------------------------- utilidades
+function lerLS(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function gravarLS(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+const $ = (id) => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+// mesma regra do monitor.py: sem acento, sem pontuação, minúsculas
+function normalizar(t) {
+  return String(t || "").normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+function hojeFlorida() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+function hhmm(iso) {
+  if (!iso) return "?";
+  return new Date(iso).toLocaleTimeString("pt-BR", { timeZone: FUSO, hour: "2-digit", minute: "2-digit" });
+}
+function ddmm(data) { const [a, m, d] = data.split("-"); return `${d}/${m}`; }
+function diaSemana(data) { return new Date(data + "T12:00:00Z").toLocaleDateString("pt-BR", { weekday: "long", timeZone: "UTC" }); }
+
+function mostrar(tipo, html) { $("mensagem").innerHTML = html ? `<div class="${tipo}">${html}</div>` : ""; }
+
+function b64ParaTexto(b64) {
+  const bin = atob(b64.replace(/\s/g, ""));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+function textoParaB64(texto) {
+  const bytes = new TextEncoder().encode(texto);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+async function baixarJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`ThemeParks.wiki respondeu ${r.status}`);
+  return r.json();
+}
+async function github(caminho, opcoes = {}) {
+  const r = await fetch(`https://api.github.com/repos/${cfg.repo}/${caminho}`, {
+    cache: "no-store", ...opcoes,
+    headers: { Authorization: `Bearer ${cfg.token}`, Accept: "application/vnd.github+json",
+               "X-GitHub-Api-Version": "2022-11-28", ...(opcoes.headers || {}) },
+  });
+  if (!r.ok) {
+    let det = ""; try { det = (await r.json()).message || ""; } catch (e) {}
+    const erro = new Error(`GitHub ${r.status}${det ? ": " + det : ""}`); erro.status = r.status; throw erro;
+  }
+  return r.json();
+}
+
+// ---------------------------------------------------------------- alertas.yaml
+function interpretar(texto, sha) {
+  texto = texto.replace(/\r\n/g, "\n");
+  const m = texto.match(/^alertas:[ \t]*$/m);
+  if (!m) throw new Error('Não encontrei a linha "alertas:" no alertas.yaml.');
+  // CORE_SCHEMA: datas como 2026-11-08 continuam texto (igual ao str() do monitor.py)
+  const dados = jsyaml.load(texto, { schema: jsyaml.CORE_SCHEMA }) || {};
+  const alertas = (dados.alertas || []).map(a => ({ ...a, data: String(a.data) }));
+  const antecedencia = Number(dados.minutos_antes_da_abertura ?? ANTECEDENCIA_PADRAO);
+  return { texto, sha, header: texto.slice(0, m.index), alertas, antecedencia };
+}
+
+function q(s) { return JSON.stringify(String(s)); }   // string YAML entre aspas, segura para ":" e "&"
+function linhaAlerta(a) {
+  const p = [`data: ${a.data}`, `parque: ${q(a.parque)}`, `atracao: ${q(a.atracao)}`, `tipo: ${a.tipo}`];
+  if (a.tipo === "fila") p.push(`max_min: ${Number(a.max_min)}`);
+  if (a.tipo === "ll") p.push(`antes_de: ${q(a.antes_de)}`);
+  return `  - {${p.join(", ")}}`;
+}
+function gerarYaml(header, alertas) {
+  const porData = new Map();
+  for (const a of alertas) { if (!porData.has(a.data)) porData.set(a.data, []); porData.get(a.data).push(a); }
+  const blocos = [...porData.keys()].sort().map(data => {
+    const lista = porData.get(data);
+    const nomes = [...new Set(lista.map(a => String(a.parque).toUpperCase()))].join(" + ");
+    return `  # ---------------- ${nomes} — ${diaSemana(data)} ${ddmm(data)} ----------------\n` +
+           lista.map(linhaAlerta).join("\n");
+  });
+  return header + "alertas:\n\n" + blocos.join("\n\n") + "\n";
+}
+
+// ---------------------------------------------------------------- parques e atrações
+function acharParque(nome) {
+  const alvo = normalizar(nome);
+  const exato = parques.find(p => normalizar(p.name) === alvo);
+  if (exato) return exato;
+  const cands = parques.filter(p => normalizar(p.name).includes(alvo));
+  return cands.length === 1 ? cands[0] : null;
+}
+// mesma regra do monitor.py: contém o texto; prefere ATTRACTION e o nome mais curto
+function acharAtracao(nome, itens) {
+  const alvo = normalizar(nome);
+  const achados = itens.filter(i => normalizar(i.name).includes(alvo));
+  achados.sort((a, b) => ((a.entityType !== "ATTRACTION") - (b.entityType !== "ATTRACTION")) || (a.name.length - b.name.length));
+  return achados[0] || null;
+}
+const doDiaEParque = (a) => a.data === sel.data && acharParque(a.parque)?.id === sel.parqueId;
+const atracoes = () => live.filter(i => i.entityType === "ATTRACTION");
+
+// ---------------------------------------------------------------- carregamento
+async function carregarTudo() {
+  mostrar("", "");
+  if (!cfg.token) { abrirConfig(true); return; }
+  try {
+    mostrar("suave", "Carregando…");
+    const [conteudo, destinos] = await Promise.all([
+      github(`contents/${ARQUIVO}?ref=${RAMO}`),
+      baixarJson(`${API}/destinations`),
+    ]);
+    arquivo = interpretar(b64ParaTexto(conteudo.content), conteudo.sha);
+    parques = destinos.destinations
+      .filter(d => /walt disney world|universal orlando/i.test(d.name))
+      .flatMap(d => d.parks.map(p => ({ id: p.id, name: p.name })))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    $("inParque").innerHTML = parques.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    // dia inicial: hoje, se tiver alertas; senão o próximo dia com alertas
+    const hoje = hojeFlorida();
+    const datas = [...new Set(arquivo.alertas.map(a => a.data))].sort();
+    sel.data = datas.includes(hoje) ? hoje : (datas.find(d => d >= hoje) || hoje);
+    $("inData").value = sel.data;
+    escolherParqueDoDia();
+    $("config").hidden = true;
+    $("selecao").hidden = false; $("filtros").hidden = false; $("barraSalvar").hidden = false;
+    mostrar("", "");
+    await carregarParque();
+  } catch (e) {
+    if (e.status === 401 || e.status === 403 || e.status === 404) {
+      mostrar("erro", `Não consegui ler o <code>${ARQUIVO}</code> em <code>${esc(cfg.repo)}</code> (${esc(e.message)}). Confira o token e o repositório em ⚙️.`);
+      abrirConfig(true);
+    } else {
+      mostrar("erro", "Erro ao carregar: " + esc(e.message));
+    }
+  }
+}
+
+function escolherParqueDoDia() {
+  const doDia = arquivo.alertas.filter(a => a.data === sel.data);
+  const p = doDia.length ? acharParque(doDia[0].parque) : null;
+  sel.parqueId = p ? p.id : (sel.parqueId || parques[0]?.id);
+  $("inParque").value = sel.parqueId;
+}
+
+async function carregarParque() {
+  $("lista").innerHTML = `<p class="suave">Carregando filas…</p>`;
+  try {
+    const [vivo, agenda] = await Promise.all([
+      baixarJson(`${API}/entity/${sel.parqueId}/live`),
+      baixarJson(`${API}/entity/${sel.parqueId}/schedule`).catch(() => ({ schedule: [] })),
+    ]);
+    live = vivo.liveData || [];
+    montarEdits();
+    mostrarHorario(agenda.schedule || []);
+    desenhar();
+  } catch (e) {
+    $("lista").innerHTML = `<div class="erro">Não consegui carregar as filas: ${esc(e.message)}</div>`;
+  }
+  agendarAtualizacao();
+}
+
+async function atualizarFilas() {
+  if (!sel.parqueId) return;
+  try {
+    const vivo = await baixarJson(`${API}/entity/${sel.parqueId}/live`);
+    live = vivo.liveData || [];
+    desenhar();
+  } catch (e) { /* tenta de novo no próximo ciclo */ }
+}
+function agendarAtualizacao() {
+  clearInterval(timerLive);
+  timerLive = setInterval(() => { if (!document.hidden) atualizarFilas(); }, 60000);
+}
+
+function mostrarHorario(agenda) {
+  const doDia = agenda.filter(s => s.date === sel.data);
+  const geral = doDia.filter(s => s.type === "OPERATING").sort((a, b) => a.openingTime.localeCompare(b.openingTime))[0];
+  let txt = "Horário deste dia ainda não publicado.";
+  if (geral) {
+    const abre = new Date(geral.openingTime);
+    const inicio = new Date(abre.getTime() - arquivo.antecedencia * 60000);
+    txt = `Abre ${hhmm(geral.openingTime)} · fecha ${hhmm(geral.closingTime)} · alertas a partir de ${hhmm(inicio.toISOString())}`;
+  }
+  $("horario").textContent = `${diaSemana(sel.data)}, ${ddmm(sel.data)} — ${txt}`;
+  const aviso = $("avisoDia");
+  aviso.hidden = DIAS_AGENDADOS.includes(sel.data);
+  aviso.textContent = `O agendamento no GitHub só roda em ${DIAS_AGENDADOS.map(ddmm).join(", ")}. Alertas salvos para ${ddmm(sel.data)} não vão disparar sem ajustar o monitor.yml.`;
+}
+
+// edits = alertas atuais do arquivo para o dia/parque, por atração
+function montarEdits() {
+  edits = {}; orfaos = [];
+  for (const a of arquivo.alertas.filter(doDiaEParque)) {
+    const item = acharAtracao(a.atracao, live);
+    if (!item || item.entityType !== "ATTRACTION" || !["fila", "ll"].includes(a.tipo)) { orfaos.push({ alerta: a, remover: false }); continue; }
+    const e = edits[item.id] || (edits[item.id] = novoEdit());
+    if (a.tipo === "fila") e.fila = { on: true, max: Number(a.max_min), orig: a.atracao };
+    else e.ll = { on: true, ate: String(a.antes_de || "23:59"), orig: a.atracao };
+  }
+  original = JSON.stringify(edits);
+  assinaturaOriginal = assinatura(edits);
+  comAlertaNoArquivo = new Set(Object.keys(edits));
+  desenharOrfaos();
+}
+// só o que vai para o arquivo: alertas ligados e seus valores
+function assinatura(ed) {
+  return JSON.stringify(Object.keys(ed).sort().map(id => [id,
+    ed[id].fila.on ? Number(ed[id].fila.max) : null, ed[id].ll.on ? ed[id].ll.ate : null])
+    .filter(([, f, l]) => f !== null || l !== null));
+}
+function novoEdit() { return { fila: { on: false, max: PADRAO_FILA, orig: null }, ll: { on: false, ate: PADRAO_LL, orig: null } }; }
+function temAlerta(id) { const e = edits[id]; return !!(e && (e.fila.on || e.ll.on)); }
+
+// ---------------------------------------------------------------- desenho
+// na Universal o RETURN_TIME é a Virtual Line (fila virtual grátis do app da Universal)
+const ehUniversal = () => /universal/i.test(parques.find(p => p.id === sel.parqueId)?.name || "");
+const nomeLL = () => ehUniversal() ? "fila virtual" : "LL";
+function resumoLL(fila) {
+  const ll = fila.RETURN_TIME || fila.PAID_RETURN_TIME;
+  if (!ll) return null;
+  const tipo = ehUniversal() ? "Fila virtual" : fila.RETURN_TIME ? "LL Multi" : "LL Single";
+  const preco = !fila.RETURN_TIME && ll.price?.formatted ? ` ${ll.price.formatted}` : "";
+  if (ll.state === "AVAILABLE" && ll.returnStart) return { txt: `${tipo}${preco}: <b>${hhmm(ll.returnStart)}</b>`, inicio: ll.returnStart };
+  const situacao = { TEMP_FULL: "lotada agora", FINISHED: "esgotada" }[ll.state] || "indisponível";
+  return { txt: `${tipo}${preco}: ${situacao}`, inicio: null };
+}
+
+function desenhar() {
+  const busca = normalizar($("inBusca").value);
+  const itens = atracoes()
+    .filter(i => !busca || normalizar(i.name).includes(busca))
+    .filter(i => !soAlerta || temAlerta(i.id))
+    .sort((a, b) => (comAlertaNoArquivo.has(b.id) - comAlertaNoArquivo.has(a.id)) || a.name.localeCompare(b.name));
+  if (!itens.length) {
+    $("lista").innerHTML = `<p class="suave">${atracoes().length ? "Nenhuma atração com esse filtro." : "A API não listou atrações para este parque agora."}</p>`;
+  } else {
+    $("lista").innerHTML = itens.map(cartao).join("");
+  }
+  atualizarBarra();
+}
+
+function cartao(i) {
+  const fila = i.queue || {};
+  const e = edits[i.id] || novoEdit();
+  const espera = fila.STANDBY?.waitTime;
+  const aberto = i.status === "OPERATING";
+  const chip = aberto ? `<span class="chip ok">aberta</span>`
+    : `<span class="chip ruim">${{ DOWN: "parada", CLOSED: "fechada", REFURBISHMENT: "em reforma" }[i.status] || esc(i.status || "?")}</span>`;
+  const ll = resumoLL(fila);
+  const temLL = !!ll || e.ll.on;
+  const filaTxt = aberto && espera != null ? `Fila: <b>${espera} min</b>` : `Fila: —`;
+  const bateFila = e.fila.on && aberto && espera != null && espera <= e.fila.max;
+  const bateLL = e.ll.on && ll?.inicio && hhmm(ll.inicio) <= e.ll.ate;
+  return `
+  <div class="atr ${temAlerta(i.id) ? "com-alerta" : ""}" data-id="${i.id}">
+    <div class="topo"><span class="nome">${esc(i.name)}</span>${chip}</div>
+    <div class="agora"><span>${filaTxt}</span>${ll ? `<span>${ll.txt}</span>` : ""}</div>
+    <div class="controle">
+      <label><input type="checkbox" data-campo="fila.on" ${e.fila.on ? "checked" : ""}> Avisar fila até</label>
+      <input type="number" inputmode="numeric" min="0" max="300" step="5" data-campo="fila.max" value="${e.fila.max}"> min
+      ${bateFila ? `<span class="chip ok bate">já está</span>` : ""}
+    </div>
+    ${temLL ? `
+    <div class="controle">
+      <label><input type="checkbox" data-campo="ll.on" ${e.ll.on ? "checked" : ""}> Avisar ${nomeLL()} com retorno até</label>
+      <input type="time" data-campo="ll.ate" value="${esc(e.ll.ate)}">
+      ${bateLL ? `<span class="chip ok bate">já está</span>` : ""}
+    </div>` : ""}
+  </div>`;
+}
+
+function desenharOrfaos() {
+  $("orfaos").hidden = !orfaos.length;
+  $("listaOrfaos").innerHTML = orfaos.map((o, n) => {
+    const a = o.alerta;
+    const desc = a.tipo === "fila" ? `fila até ${a.max_min} min` : a.tipo === "ll" ? `${nomeLL()} até ${a.antes_de}` : a.tipo;
+    return `<div class="orfao ${o.remover ? "removido" : ""}"><span>${esc(a.atracao)} — ${esc(desc)}</span>
+      <button data-orfao="${n}">${o.remover ? "Manter" : "Remover"}</button></div>`;
+  }).join("");
+}
+
+function alteracoes() {
+  return assinatura(edits) !== assinaturaOriginal || orfaos.some(o => o.remover);
+}
+function atualizarBarra() {
+  const mudou = alteracoes();
+  const total = atracoes().filter(i => temAlerta(i.id)).length;
+  $("infoSalvar").textContent = mudou ? "Alterações não salvas" : `${total} atração(ões) com alerta`;
+  $("btnSalvar").disabled = !mudou;
+  $("btnDescartar").disabled = !mudou;
+}
+
+// ---------------------------------------------------------------- salvar
+async function salvar() {
+  const btn = $("btnSalvar");
+  btn.disabled = true; btn.textContent = "Salvando…";
+  try {
+    // relê o arquivo para não sobrescrever uma edição feita em outro lugar
+    const atual = await github(`contents/${ARQUIVO}?ref=${RAMO}`);
+    if (atual.sha !== arquivo.sha) {
+      arquivo = interpretar(b64ParaTexto(atual.content), atual.sha);
+      montarEdits(); desenhar();
+      mostrar("erro", "O arquivo mudou no GitHub enquanto você editava. Recarreguei a versão nova: refaça a alteração e salve de novo.");
+      return;
+    }
+    const parqueAtual = parques.find(p => p.id === sel.parqueId);
+    const doGrupo = arquivo.alertas.filter(doDiaEParque);
+    const nomeParque = doGrupo[0]?.parque || parqueAtual.name;
+    const outros = arquivo.alertas.filter(a => !doDiaEParque(a));
+    const mantidos = orfaos.filter(o => !o.remover).map(o => o.alerta);
+    const novos = [];
+    for (const i of atracoes().sort((a, b) => a.name.localeCompare(b.name))) {
+      const e = edits[i.id]; if (!e) continue;
+      if (e.ll.on) {
+        if (!/^\d{2}:\d{2}$/.test(e.ll.ate)) throw new Error(`Horário inválido em ${i.name}.`);
+        novos.push({ data: sel.data, parque: nomeParque, atracao: e.ll.orig || i.name, tipo: "ll", antes_de: e.ll.ate });
+      }
+      if (e.fila.on) {
+        const max = Number(e.fila.max);
+        if (!Number.isFinite(max) || max < 0 || max > 300) throw new Error(`Limite de fila inválido em ${i.name}.`);
+        novos.push({ data: sel.data, parque: nomeParque, atracao: e.fila.orig || i.name, tipo: "fila", max_min: Math.round(max) });
+      }
+    }
+    const final = [...outros, ...mantidos, ...novos];
+    const texto = gerarYaml(arquivo.header, final);
+    jsyaml.load(texto, { schema: jsyaml.CORE_SCHEMA });   // confere se o YAML gerado é válido antes de enviar
+    const resp = await github(`contents/${ARQUIVO}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: `Alertas pelo celular: ${parqueAtual.name} ${ddmm(sel.data)}`,
+        content: textoParaB64(texto), sha: arquivo.sha, branch: RAMO,
+      }),
+    });
+    arquivo = interpretar(texto, resp.content.sha);
+    montarEdits(); desenhar();
+    mostrar("sucesso", "Salvo ✓ Vale a partir da próxima rodada do monitor (até uns 5 minutos).");
+  } catch (e) {
+    mostrar("erro", "Não salvei: " + esc(e.message));
+  } finally {
+    btn.textContent = "Salvar alertas"; atualizarBarra();
+  }
+}
+
+// ---------------------------------------------------------------- configuração
+function abrirConfig(aberta) {
+  $("config").hidden = !aberta;
+  $("inRepo").value = cfg.repo;
+  $("inToken").value = "";
+  $("inToken").placeholder = cfg.token ? "token salvo (cole outro para trocar)" : "github_pat_...";
+}
+function linkToken() {
+  const dono = cfg.repo.split("/")[0] || "";
+  const p = new URLSearchParams({ name: "Painel alertas parques", description: "Editar alertas.yaml pelo celular",
+                                  target_name: dono, expires_in: "30", contents: "write" });
+  $("linkToken").href = "https://github.com/settings/personal-access-tokens/new?" + p.toString();
+}
+
+// ---------------------------------------------------------------- eventos
+$("btnConfig").onclick = () => abrirConfig($("config").hidden);
+$("btnSalvarConfig").onclick = () => {
+  const t = $("inToken").value.trim(), r = $("inRepo").value.trim();
+  if (t) { cfg.token = t; gravarLS("painel.token", t); }
+  if (r) { cfg.repo = r; gravarLS("painel.repo", r); }
+  linkToken();
+  if (!cfg.token) { mostrar("erro", "Cole o token antes de salvar."); return; }
+  $("config").hidden = true; carregarTudo();
+};
+$("btnEsquecer").onclick = () => {
+  cfg.token = ""; gravarLS("painel.token", null);
+  mostrar("sucesso", "Token apagado deste aparelho."); abrirConfig(true);
+};
+$("inData").onchange = async () => {
+  if (!$("inData").value) return;
+  if (alteracoes() && !confirm("Descartar as alterações não salvas?")) { $("inData").value = sel.data; return; }
+  sel.data = $("inData").value; escolherParqueDoDia(); await carregarParque();
+};
+$("inParque").onchange = async () => {
+  if (alteracoes() && !confirm("Descartar as alterações não salvas?")) { $("inParque").value = sel.parqueId; return; }
+  sel.parqueId = $("inParque").value; await carregarParque();
+};
+$("inBusca").oninput = desenhar;
+$("btnSoAlerta").onclick = () => { soAlerta = !soAlerta; $("btnSoAlerta").setAttribute("aria-pressed", soAlerta);
+  $("btnSoAlerta").classList.toggle("primario", soAlerta); desenhar(); };
+$("btnAtualizar").onclick = atualizarFilas;
+$("btnSalvar").onclick = salvar;
+$("btnDescartar").onclick = () => { edits = JSON.parse(original); orfaos.forEach(o => o.remover = false); desenharOrfaos(); desenhar(); };
+$("listaOrfaos").onclick = (ev) => {
+  const n = ev.target.dataset.orfao; if (n == null) return;
+  orfaos[n].remover = !orfaos[n].remover; desenharOrfaos(); atualizarBarra();
+};
+// mudanças nos campos de cada atração
+function aoMudarCampo(ev) {
+  const campo = ev.target.dataset.campo; if (!campo) return;
+  const id = ev.target.closest(".atr").dataset.id;
+  const e = edits[id] || (edits[id] = novoEdit());
+  const [grupo, chave] = campo.split(".");
+  if (chave === "on") e[grupo].on = ev.target.checked;
+  else if (chave === "max") { e[grupo].max = Number(ev.target.value); if (ev.type === "change") e[grupo].on = true; }
+  else if (chave === "ate") { e[grupo].ate = ev.target.value; if (ev.type === "change") e[grupo].on = true; }
+  if (ev.type === "change") desenhar(); else atualizarBarra();
+}
+$("lista").addEventListener("change", aoMudarCampo);
+$("lista").addEventListener("input", aoMudarCampo);
+window.addEventListener("beforeunload", (ev) => { if (arquivo && alteracoes()) { ev.preventDefault(); ev.returnValue = ""; } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && arquivo) atualizarFilas(); });
+
+function relogio() {
+  $("relogio").textContent = "Flórida " + new Date().toLocaleTimeString("pt-BR", { timeZone: FUSO, hour: "2-digit", minute: "2-digit" });
+}
+relogio(); setInterval(relogio, 15000);
+linkToken();
+carregarTudo();
+</script>
+</body>
+</html>
