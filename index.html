@@ -57,6 +57,9 @@
   .chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 2px 9px; font-size: 12px; white-space: nowrap; }
   .chip.ok { background: var(--okbg); color: var(--ok); }
   .chip.ruim { background: var(--ruimbg); color: var(--ruim); }
+  .perfil { margin-top: 6px; font-size: 13px; display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: center; }
+  .perfil .sim { color: var(--ok); font-weight: 600; }
+  .perfil .nao { color: var(--ruim); font-weight: 600; }
   .agora { margin: 6px 0 8px; font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
   .agora b { font-size: 16px; }
   .controle { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px dashed var(--linha); flex-wrap: wrap; }
@@ -147,7 +150,86 @@ const ARQUIVO = "alertas.yaml";
 const RAMO = "main";
 const REPO_PADRAO = "Alertas-Parques/alertas-parques";
 // dias em que o agendamento do GitHub Actions roda (ver .github/workflows/monitor.yml)
-const DIAS_AGENDADOS = ["2026-11-08", "2026-11-10", "2026-11-12"];
+const DIAS_PARQUE = ["2026-11-08", "2026-11-10", "2026-11-12"];          // a cada 5 min
+const DIAS_TESTE = ["2026-11-05", "2026-11-06", "2026-11-07", "2026-11-09", "2026-11-11"];  // a cada 10 min
+const DIAS_AGENDADOS = [...DIAS_PARQUE, ...DIAS_TESTE].sort();
+
+// crianças da família (altura em cm) para mostrar quem pode ir em cada brinquedo
+const CRIANCAS = [["Murilo", 117], ["Miguel", 97]];
+
+// tipo e altura mínima (polegadas; 0 = sem altura mínima) das atrações dos parques da viagem.
+// A API não informa altura e classifica mal o tipo, por isso a tabela é mantida aqui.
+// Fontes: sites oficiais Disney/Universal e lista do Epic Universe da Behind the Thrills (fev/2025).
+// t: "b" brinquedo · "s" show/cinema · "e" área para explorar · "p" encontro com personagem
+const INFO_ATRACOES = {
+  // Hollywood Studios
+  "alien swirling saucers": { t: "b", h: 32 },
+  "mickey minnie s runaway railway": { t: "b", h: 0 },
+  "millennium falcon smugglers run": { t: "b", h: 38 },
+  "rock n roller coaster": { t: "b", h: 48 },
+  "slinky dog dash": { t: "b", h: 38 },
+  "star tours": { t: "b", h: 38 },
+  "rise of the resistance": { t: "b", h: 40 },
+  "tower of terror": { t: "b", h: 40 },
+  "toy story mania": { t: "b", h: 0 },
+  "off the page": { t: "e", h: 0 },
+  "olaf draws": { t: "s", h: 0 },
+  "once upon a studio": { t: "s", h: 0 },
+  "vacation fun": { t: "s", h: 0 },
+  "walt disney presents": { t: "e", h: 0 },
+  // Magic Kingdom
+  "it s a small world": { t: "b", h: 0 },
+  "a pirate s adventure": { t: "e", h: 0 },
+  "astro orbiter": { t: "b", h: 0 },
+  "big thunder mountain": { t: "b", h: 40 },
+  "buzz lightyear": { t: "b", h: 0 },
+  "casey jr splash": { t: "e", h: 0 },
+  "cinderella castle": { t: "e", h: 0 },
+  "country bear": { t: "s", h: 0 },
+  "dumbo": { t: "b", h: 0 },
+  "enchanted tales with belle": { t: "p", h: 0 },
+  "haunted mansion": { t: "b", h: 0 },
+  "jingle cruise": { t: "b", h: 0 },
+  "jungle cruise": { t: "b", h: 0 },
+  "mad tea party": { t: "b", h: 0 },
+  "main street vehicles": { t: "b", h: 0 },
+  "philharmagic": { t: "s", h: 0 },
+  "laugh floor": { t: "s", h: 0 },
+  "peter pan s flight": { t: "b", h: 0 },
+  "pirates of the caribbean": { t: "b", h: 0 },
+  "regal carrousel": { t: "b", h: 0 },
+  "seven dwarfs mine train": { t: "b", h: 38 },
+  "space mountain": { t: "b", h: 44 },
+  "swiss family treehouse": { t: "e", h: 0 },
+  "the barnstormer": { t: "b", h: 35 },
+  "hall of presidents": { t: "s", h: 0 },
+  "magic carpets of aladdin": { t: "b", h: 0 },
+  "winnie the pooh": { t: "b", h: 0 },
+  "tiana s bayou adventure": { t: "b", h: 40 },
+  "tomorrowland speedway": { t: "b", h: 32, nota: "para dirigir sozinho: 137 cm" },
+  "peoplemover": { t: "b", h: 0 },
+  "tron lightcycle": { t: "b", h: 48 },
+  "under the sea": { t: "b", h: 0 },
+  "walt disney world railroad": { t: "b", h: 0 },
+  "carousel of progress": { t: "s", h: 0 },
+  "enchanted tiki room": { t: "s", h: 0 },
+  // Epic Universe
+  "astronomica": { t: "e", h: 0 },
+  "bowser jr challenge": { t: "e", h: 0 },
+  "constellation carousel": { t: "b", h: 0 },
+  "curse of the werewolf": { t: "b", h: 40 },
+  "dragon racer s rally": { t: "b", h: 48 },
+  "fyre drill": { t: "b", h: 0, nota: "criança precisa de adulto junto" },
+  "battle at the ministry": { t: "b", h: 40 },
+  "hiccup s wing gliders": { t: "b", h: 40 },
+  "mario kart": { t: "b", h: 40 },
+  "mine cart madness": { t: "b", h: 40 },
+  "monsters unchained": { t: "b", h: 48 },
+  "stardust racers": { t: "b", h: 48 },
+  "viking training camp": { t: "e", h: 0 },
+  "yoshi s adventure": { t: "b", h: 34 },
+};
+const TIPOS = { b: "🎢 Brinquedo", s: "🎭 Show", e: "🚶 Para explorar", p: "🤝 Personagem" };
 const ANTECEDENCIA_PADRAO = 5;
 const PADRAO_FILA = 20, PADRAO_LL = "19:00";
 
@@ -350,10 +432,12 @@ function mostrarHorario(agenda) {
     const inicio = new Date(abre.getTime() - arquivo.antecedencia * 60000);
     txt = `Abre ${hhmm(geral.openingTime)} · fecha ${hhmm(geral.closingTime)} · alertas a partir de ${hhmm(inicio.toISOString())}`;
   }
-  $("horario").textContent = `${diaSemana(sel.data)}, ${ddmm(sel.data)} — ${txt}`;
+  const ritmo = DIAS_PARQUE.includes(sel.data) ? " · monitor a cada 5 min"
+              : DIAS_TESTE.includes(sel.data) ? " · monitor a cada 10 min (dia de teste)" : "";
+  $("horario").textContent = `${diaSemana(sel.data)}, ${ddmm(sel.data)} — ${txt}${ritmo}`;
   const aviso = $("avisoDia");
   aviso.hidden = DIAS_AGENDADOS.includes(sel.data);
-  aviso.textContent = `O agendamento no GitHub só roda em ${DIAS_AGENDADOS.map(ddmm).join(", ")}. Alertas salvos para ${ddmm(sel.data)} não vão disparar sem ajustar o monitor.yml.`;
+  aviso.textContent = `O monitor só roda de ${ddmm(DIAS_AGENDADOS[0])} a ${ddmm(DIAS_AGENDADOS.at(-1))}. Alertas salvos para ${ddmm(sel.data)} não vão disparar sem ajustar o monitor.yml.`;
 }
 
 // edits = alertas atuais do arquivo para o dia/parque, por atração
@@ -394,6 +478,35 @@ function resumoLL(fila) {
   return { txt: `${tipo}${preco}: ${situacao}`, inicio: null };
 }
 
+// tipo/altura pela tabela: pega a chave mais longa contida no nome
+function infoDe(nome) {
+  const n = normalizar(nome);
+  let melhor = null;
+  for (const chave of Object.keys(INFO_ATRACOES)) {
+    if (n.includes(chave) && (!melhor || chave.length > melhor.length)) melhor = chave;
+  }
+  return melhor ? INFO_ATRACOES[melhor] : null;
+}
+function linhaPerfil(nome) {
+  const info = infoDe(nome);
+  if (!info) return "";
+  const partes = [`<span class="chip">${TIPOS[info.t]}</span>`];
+  if (info.t === "b") {
+    if (!info.h) {
+      partes.push(`<span>Sem altura mínima</span>`);
+    } else {
+      const cm = Math.round(info.h * 2.54);
+      const quem = CRIANCAS.map(([nomeC, alt]) => {
+        if (alt < cm - 0.5) return `<span class="nao">${nomeC} ✗</span>`;
+        return alt - cm < 3 ? `<span class="sim">${nomeC} ✓ (no limite)</span>` : `<span class="sim">${nomeC} ✓</span>`;
+      }).join(" ");
+      partes.push(`<span>Mín. <b>${cm} cm</b></span>`, quem);
+    }
+  }
+  if (info.nota) partes.push(`<span class="suave">${esc(info.nota)}</span>`);
+  return `<div class="perfil">${partes.join(" ")}</div>`;
+}
+
 function desenhar() {
   const busca = normalizar($("inBusca").value);
   const itens = atracoes()
@@ -423,6 +536,7 @@ function cartao(i) {
   return `
   <div class="atr ${temAlerta(i.id) ? "com-alerta" : ""}" data-id="${i.id}">
     <div class="topo"><span class="nome">${esc(i.name)}</span>${chip}</div>
+    ${linhaPerfil(i.name)}
     <div class="agora"><span>${filaTxt}</span>${ll ? `<span>${ll.txt}</span>` : ""}</div>
     <div class="controle">
       <label><input type="checkbox" data-campo="fila.on" ${e.fila.on ? "checked" : ""}> Avisar fila até</label>
